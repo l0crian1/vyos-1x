@@ -4,8 +4,9 @@
     <help>VXLAN network identifier (VNI) number</help>
     <completionHelp>
       <list>1-16777215</list>
+      <script>${vyos_completion_dir}/list_vni.py</script>
     </completionHelp>
   </properties>
-  <command>${vyos_op_scripts_dir}/vtysh_wrapper.sh $@</command>
+  <command>${vyos_op_scripts_dir}/evpn.py $@</command>
 </tagNode>
 <!-- included end -->
