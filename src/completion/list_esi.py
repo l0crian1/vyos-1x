@@ -24,7 +24,6 @@ def get_esi():
     esiList = []
     for i in esiDict:
         print(i['esi'])
-    #print(' '.join(esiDict.keys()))
 
 if __name__ == '__main__':
     get_esi()
