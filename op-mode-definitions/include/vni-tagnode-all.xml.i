@@ -7,6 +7,6 @@
       <script>${vyos_completion_dir}/list_vni.py</script>
     </completionHelp>
   </properties>
-  <command>${vyos_op_scripts_dir}/evpn.py $@</command>
+  <command>${vyos_op_scripts_dir}/evpn.py show_evpn --command "$*"</command>
 </tagNode>
 <!-- included end -->

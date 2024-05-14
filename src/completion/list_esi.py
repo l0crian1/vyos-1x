@@ -22,6 +22,7 @@ from vyos.utils.process import cmd
 def get_esi():
     esiDict = json.loads(cmd(f"vtysh -c 'show evpn es json'"))
     esiList = []
+    print()
     for i in esiDict:
         print(i['esi'])
 
