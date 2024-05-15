@@ -59,6 +59,7 @@
                 <properties>
                   <help>Show ESI information for specified ESI</help>
                   <completionHelp>
+                    <list>&lt;esi&gt;</list>
                     <script>${vyos_completion_dir}/list_esi.py</script>
                   </completionHelp>
                 </properties>
@@ -105,6 +106,7 @@
               #include <include/vni-tagnode-all.xml.i>
             </children>
           </node>
+              #include <include/vni-tagnode-all.xml.i>
           <node name="vni">
             <properties>
               <help>Show VNI information</help>
@@ -117,7 +119,6 @@
                 </properties>
                 <command>${vyos_op_scripts_dir}/evpn.py show_evpn --command "$*"</command>
               </leafNode>
-              #include <include/vni-tagnode-all.xml.i>
             </children>
           </node>
         </children>
