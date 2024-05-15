@@ -106,7 +106,7 @@
               #include <include/vni-tagnode-all.xml.i>
             </children>
           </node>
-          #include <include/vni-tagnode-all.xml.i>
+          #include <include/vni-tagnode.xml.i>
           <node name="vni">
             <properties>
               <help>Show VNI information</help>
