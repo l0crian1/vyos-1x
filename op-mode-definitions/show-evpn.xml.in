@@ -45,7 +45,6 @@
           </node>
           <tagNode name="es">
             <properties>
-              <help>Show ESI information for specified ESI</help>
               <completionHelp>
                 <list>&lt;esi&gt;</list>
                 <script>${vyos_completion_dir}/list_esi.py</script>
