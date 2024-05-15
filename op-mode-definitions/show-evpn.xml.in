@@ -71,7 +71,7 @@
             <properties>
               <help>Show ESI information per EVI</help>
             </properties>
-            <command>${vyos_op_scripts_dir}/evpn.py $@</command>
+            <command>${vyos_op_scripts_dir}/evpn.py show_evpn --command "$*"</command>
             <children>
               <leafNode name="detail">
                 <properties>
