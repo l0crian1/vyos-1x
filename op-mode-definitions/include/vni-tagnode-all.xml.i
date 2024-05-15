@@ -3,7 +3,7 @@
   <properties>
     <help>VXLAN network identifier (VNI) number</help>
     <completionHelp>
-      <list>&lt;1-16777215&gt;</list>
+      <list>&lt;1-16777215&gt; all</list>
       <script>${vyos_completion_dir}/list_vni.py</script>
     </completionHelp>
   </properties>
