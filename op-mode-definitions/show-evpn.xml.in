@@ -55,7 +55,7 @@
                 </properties>
                 <command>${vyos_op_scripts_dir}/evpn.py show_evpn --command "$*"</command>
               </leafNode>
-              <tagNode name="esi">
+              <tagNode name="es">
                 <properties>
                   <help>Show ESI information for specified ESI</help>
                   <completionHelp>
