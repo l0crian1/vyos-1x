@@ -45,6 +45,7 @@
           </node>
           <tagNode name="es">
             <properties>
+              <help>Show ESI information for specified ESI</help>
               <completionHelp>
                 <list>&lt;esi&gt;</list>
                 <script>${vyos_completion_dir}/list_esi.py</script>
@@ -105,7 +106,7 @@
               #include <include/vni-tagnode-all.xml.i>
             </children>
           </node>
-              #include <include/vni-tagnode-all.xml.i>
+          #include <include/vni-tagnode-all.xml.i>
           <node name="vni">
             <properties>
               <help>Show VNI information</help>
