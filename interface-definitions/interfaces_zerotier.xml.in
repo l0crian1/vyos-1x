@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<interfaceDefinition>
+  <node name="interfaces">
+    <children>
+      <tagNode name="zerotier" owner="${vyos_conf_scripts_dir}/zerotier.py">
+        <properties>
+          <help>ZeroTier Interface</help>
+          <priority>xxx</priority>
+          <constraint>
+            <regex>zt[0-9]+</regex>
+          </constraint>
+          <constraintErrorMessage>ZeroTier interface must be named ztN</constraintErrorMessage>
+          <valueHelp>
+            <format>ztN</format>
+            <description>Zerotier interface name</description>
+          </valueHelp>
+        </properties>
+        <children>
+          <tagNode name="network-id">
+            <properties>
+              <help>ZeroTier Network ID to join</help>
+              <constraint>
+                  <regex>^[A-Fa-f0-9]{16}$</regex>
+              </constraint>
+              <constraintErrorMessage>Network ID must be a 16-digit hexadecimal value</constraintErrorMessage>
+              <valueHelp>
+                  <format>16-digit hex</format>
+                  <description>Zerotier network-id</description>
+              </valueHelp>
+            </properties>
+          </tagNode>
+        </children>
+      </tagNode>
+    </children>
+  </node>
+</interfaceDefinition>
