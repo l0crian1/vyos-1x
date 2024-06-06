@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<interfaceDefinition>
+  <node name="show">
+    <children>
+      <node name="qos">
+        <properties>
+          <help>Show Quality of Service (QoS) information</help>
+        </properties>
+        <children>
+          <node name="shaping">
+            <properties>
+              <help>Show QoS shaping information</help>
+            </properties>
+            <command>${vyos_op_scripts_dir}/qos.py show_shaping</command>
+            <children>
+              <leafNode name="detail">
+                <properties>
+                  <help>Show QoS detailed information</help>
+                </properties>
+                <command>${vyos_op_scripts_dir}/qos.py show_shaping --detail</command>
+              </leafNode>
+              <tagNode name="interface">
+                <properties>
+                  <help>Show QoS shaping for given interface</help>
+                  <path>qos interfaces</path>
+                </properties>
+                <command>${vyos_op_scripts_dir}/qos.py show_shaping --ifname $4</command>
+                <children>
+                  <tagNode name="class">
+                    <properties>
+                      <help>Show QoS shaping for given class</help>
+                      <list>&amp;lt;class&amp;gt;</list>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/qos.py show_shaping --ifname $4 --classn $6</command>
+                    <children>
+                      <leafNode name="detail">
+                        <properties>
+                          <help>Show QoS detailed information for given class</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/qos.py show_shaping --detail</command>
+                      </leafNode>
+                    </children>
+                  </tagNode>
+                  <leafNode name="detail">
+                    <properties>
+                      <help>Show QoS detailed information for given interface</help>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/qos.py show_shaping --detail</command>
+                  </leafNode>
+                </children>
+              </tagNode>
+            </children>
+          </node>
+        </children>
+      </node>
+    </children>
+  </node>
+</interfaceDefinition>
