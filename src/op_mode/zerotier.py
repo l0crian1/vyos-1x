@@ -19,6 +19,9 @@
 import sys
 import typing
 import json
+from tabulate import tabulate
+import requests
+import re
 
 import vyos.opmode
 from vyos.utils.process import cmd
@@ -26,28 +29,260 @@ from vyos.configquery import ConfigTreeQuery
 
 conf = ConfigTreeQuery()
 
-def show_zerotier_summary(raw: bool, command: typing.Optional[str]):
-    pass
-
-def show_zerotier_interfaces(raw: bool, command: typing.Optional[str]):
+def show_interfaces(raw: bool):
     # Get list of interfaces
     zt_int_dict = conf.get_config_dict(['interfaces', 'zerotier'], key_mangling=('-', '_'),
                             get_first_key=True)
 
+    output_list = []
+    raw_dict = {}
+    for interface in zt_int_dict.keys():
+        zt_dict = zt_int_dict.get(interface)
+        raw_dict[interface] = {}
 
-    # Get Node ID
-    # Get IP Addresses
-    # Get Networks
+        if zt_dict:
+            interface_name = interface
+            # Get Network ID
+            network_id = zt_dict.get('network_id')
+            # Get Node ID
+            node_id = json.loads(cmd(f"podman exec vyos_created_{interface_name} zerotier-cli info -j")).get('address')
+            tmp = json.loads(cmd(f"ip -j addr show dev {interface_name}"))[0].get('addr_info')
 
+            # Get IP Addresses
+            ip_list = []
+            for address in tmp:
+                ip_list.append(f"{address.get('local')}/{address.get('prefixlen')}")
 
-def show_zerotier_metrics(raw: bool, command: typing.Optional[str]):
+            # Generate list for tabulate output
+            output_list.append([interface_name,
+                                node_id,
+                                '\n'.join(ip_list),
+                                network_id]
+                               )
+
+            raw_dict[interface]['node_id'] = node_id
+            raw_dict[interface]['ip_address'] = ip_list
+            raw_dict[interface]['network_id'] = network_id
+
+    if raw:
+        return {'zerotier': raw_dict}
+    else:
+        # Tabulate print information
+        headers = ["Interface", "Node ID", "IP Address", "Network"]
+        print(tabulate(output_list, headers))
+
+def orbit_moon():
     pass
-def show_zerotier_peers(raw: bool, command: typing.Optional[str]):
-    pass
-def show_zerotier_local_conf(raw: bool, command: typing.Optional[str]):
-    pass
-def show_zerotier_bond(raw: bool, command: typing.Optional[str]):
-    pass
+
+def zt_api(url, api_token, api_type):
+    if api_type == "service":
+        headers = {
+            "X-ZT1-Auth": api_token
+        }
+    elif api_type == "central":
+        headers = {
+            'Authorization': f'token {api_token}'
+        }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raises HTTPError for bad responses (4xx and 5xx)
+        return response  # Assuming you want to return the parsed JSON data directly
+    except requests.exceptions.HTTPError as http_err:
+        exit(f'HTTP error occurred: {http_err}')
+    except Exception as err:
+        exit(f'Other error occurred: {err}')
+    return None  # Return None in case of an error
+
+def show_peers_detail(raw: bool, interface: typing.Optional[str]):
+    localNodeList = []
+
+    headers = ['Name', 'NodeID', 'Description', 'ZeroTier IP', 'Public IP', 'Network', 'Version']
+    peer_dict = conf.get_config_dict(['interfaces', 'zerotier', interface], key_mangling=('-', '_'),
+                            get_first_key=True)
+
+    api_token = peer_dict.get('api_key')
+    if api_token:
+        pass
+    else:
+        exit("This command requires a ZeroTier Central API key to be configured")
+    primary_port = peer_dict.get('primary_port')
+
+    try:
+        with open(f'/config/vyos-zerotier/{interface}/authtoken.secret', 'r') as file:
+            authtoken = file.read()
+    except FileNotFoundError:
+        print('authtoken.secret not found! This should have been created when installing ZeroTier')
+
+    controllerNodeList = []
+    controllerNetworkList = []
+
+    network_data = zt_api(f'http://127.0.0.1:{primary_port}/peer', authtoken, 'service').json()
+    for peers in network_data:
+        localNodeList.append(peers['address'])
+
+    network_data = zt_api('https://api.zerotier.com/api/v1/network', api_token, 'central').json()
+    for networks in network_data:
+        controllerNetworkList.append(networks['id'])
+
+    raw_dict = {}
+    for controllerNode in controllerNetworkList:
+        raw_dict[controllerNode] = []
+        network_data = zt_api(f'https://api.zerotier.com/api/v1/network/{controllerNode}/member', api_token, 'central').json()
+        for i in network_data:
+            if i['nodeId'] in localNodeList:
+                controllerNodeList.append([i['name'], i['nodeId'], i['description'], '\n'.join(i['config']['ipAssignments']), i['physicalAddress'], i['networkId'], i['clientVersion']])
+                raw_dict[controllerNode].append(i)
+        #raw_dict[controllerNode] = network_data
+
+    if raw:
+        return {'zerotier': raw_dict}
+    else:
+        sorted_list = sorted(controllerNodeList, key=lambda x: x[0].lower())
+        print(tabulate(sorted_list, headers))
+
+def show_peers_all(raw: bool, interface: typing.Optional[str]):
+    headers = ['Name', 'NodeID', 'Description', 'ZeroTier IP', 'Network', 'Version']
+    peer_dict = conf.get_config_dict(['interfaces', 'zerotier', interface], key_mangling=('-', '_'),
+                            get_first_key=True)
+
+    api_token = peer_dict.get('api_key')
+    if api_token:
+        pass
+    else:
+        exit("This command requires a ZeroTier Central API key to be configured")
+
+    controllerNodeList = []
+    controllerNetworkList = []
+
+    network_data = zt_api('https://api.zerotier.com/api/v1/network', api_token, 'central').json()
+    for networks in network_data:
+        controllerNetworkList.append(networks['id'])
+
+    raw_dict = {}
+    for controllerNode in controllerNetworkList:
+        network_data = zt_api(f'https://api.zerotier.com/api/v1/network/{controllerNode}/member', api_token, 'central').json()
+        for i in network_data:
+            controllerNodeList.append([i['name'], i['nodeId'], i['description'], '\n'.join(i['config']['ipAssignments']), i['networkId'], i['clientVersion']])
+        raw_dict[controllerNode] = network_data
+
+    if raw:
+        return {'zerotier': raw_dict}
+    else:
+        sorted_list = sorted(controllerNodeList, key=lambda x: x[0].lower())
+        print(tabulate(sorted_list, headers))
+
+def show_metrics(raw: bool, metric: typing.Optional[str], interface: typing.Optional[str]):
+    def format_counts(value_list):
+        aggregated_counts = {}
+
+        for direction, value_type, count in value_list:
+            count = int(count)
+
+            if value_type not in aggregated_counts:
+                aggregated_counts[value_type] = {'rx': 0, 'tx': 0}
+
+            aggregated_counts[value_type][direction] += count
+        sorted_list = sorted([[tmp, counts['rx'], counts['tx']] for tmp, counts in aggregated_counts.items()], key=lambda x: x[0])
+
+        return sorted_list
+
+    def output_parse(pattern, line):
+        match = re.search(pattern, line)
+
+        if match:
+            # Join the matched groups into a single comma-separated string
+            result = ','.join(match.groups())
+            return result
+
+    primary_port = conf.get_config_dict(['interfaces', 'zerotier', interface], key_mangling=('-', '_'),
+                            get_first_key=True).get('primary_port')
+
+    accepted_packets_list, errors_list, latency_list, peer_packet_list, packet_type_list, protocol_list, peer_error_list = [], [], [], [], [], [], []
+
+    try:
+        with open(f'/config/vyos-zerotier/{interface}/metricstoken.secret', 'r') as file:
+            authtoken = file.read()
+    except FileNotFoundError:
+        exit('authtoken.secret not found! This should have been created when installing ZeroTier')
+
+    network_data = zt_api(f'http://127.0.0.1:{primary_port}/metrics', authtoken, 'service')
+
+    for i in network_data.text.split('\n'):
+        if i.startswith('# '):
+            continue
+
+        if 'packettype' == metric:
+            if 'packet_type=' in i:
+                pattern = r'zt_packet\{direction="(tx|rx)",packet_type="([^"]+)"\}\s(\d+)'
+                packet_type_list.append(output_parse(pattern, i).split(','))
+        elif 'errors' == metric:
+            if 'error_type=' in i:
+                pattern = r'zt_packet_error\{direction="(tx|rx)",error_type="([^"]+)"\}\s(\d+)'
+                errors_list.append(output_parse(pattern, i).split(','))
+        elif 'acceptedpackets' == metric:
+            if 'zt_network_packets{' in i:
+                pattern = r'zt_network_packets\{accepted="(yes|no)",direction="(tx|rx)",network_id="([^"]+)"\}\s(\d+)'
+                accepted_packets_list.append(output_parse(pattern, i).split(','))
+        elif 'protocols' == metric:
+            if 'protocol="' in i:
+                pattern = r'zt_data\{direction="(tx|rx)",protocol="([^"]+)"\}\s(\d+)'
+                protocol_list.append(output_parse(pattern, i).split(','))
+        elif 'peerpackets' == metric:
+            if 'zt_peer_packets{' in i:
+                pattern = r'zt_peer_packets\{direction="(tx|rx)",node_id="([^"]+)"\}\s(\d+)'
+                peer_packet_list.append(output_parse(pattern, i).split(','))
+        elif 'peerpacketerrors' == metric:
+            if 'zt_peer_packet_errors{' in i:
+                pattern = r'node_id="([^"]+)"\} (\d+)'
+                peer_error_list.append(output_parse(pattern, i).split(','))
+        elif 'latency' == metric:
+            if 'zt_peer_latency_bucket{' in i:
+                latency_list.append(i.replace('zt_peer_latency_bucket{','').replace('"', '').replace('node_id=', '').replace('} ', ',').split(','))
+
+    if 'peerpackets' == metric:
+        sorted_list = format_counts(peer_packet_list)
+        headers = ["Peer", "RX Count", "TX Count"]
+    elif 'protocols' == metric:
+        sorted_list = format_counts(protocol_list)
+        headers = ["Protocol", "RX Count", "TX Count"]
+    elif 'packettype' == metric:
+        sorted_list = format_counts(packet_type_list)
+        headers = ["Packet Type", "RX Count", "TX Count"]
+    elif 'errors' == metric:
+        sorted_list = format_counts(errors_list)
+        headers = ["Error Type", "RX Count", "TX Count"]
+    elif 'acceptedpackets' == metric:
+        sorted_list = sorted(accepted_packets_list, key=lambda x: (x[2], x[0]))
+        headers = ["Allowed", "Direction", "NetworkID", "Count"]
+    elif 'peerpacketerrors' == metric:
+        sorted_list = sorted(peer_error_list, key=lambda x: (x[1], x[0]))
+        headers = ["Peer Node ID", "Error Count"]
+    elif 'latency' == metric:
+        node_data = {}
+
+        for node_id, le_value, count in latency_list:
+            if node_id not in node_data:
+                node_data[node_id] = {}
+            node_data[node_id][le_value] = int(count)
+
+        headers = ["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf"]
+
+        table_data = []
+
+        for node_id, counts in sorted(node_data.items()):
+            row = [node_id] + [counts.get(le, 0) for le in headers[1:]]
+            table_data.append(row)
+
+        sorted_list = sorted(table_data, key=lambda x: (x[2], x[0]))
+
+    print(tabulate(sorted_list, headers))
+
+def show_command(raw: bool, command: typing.Optional[str], interface: typing.Optional[str]):
+    if raw:
+        return {'zerotier': json.loads(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command} -j"))}
+    else:
+        print(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command}"))
 
 if __name__ == '__main__':
     try:

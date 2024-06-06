@@ -38,7 +38,7 @@
           </leafNode>
           <leafNode name="api-key">
             <properties>
-              <help>Provide ZeroTierCentral API key</help>
+              <help>ZT API key - DO NOT share</help>
               <valueHelp>
                   <format>API key</format>
                   <description>IP address</description>
@@ -62,6 +62,9 @@
           <leafNode name="bonding-policy">
             <properties>
               <help>Bonding policy to be applied</help>
+              <completionHelp>
+                <list>active-backup broadcast balance-rr balance-xor balance-aware</list>
+              </completionHelp>
               <valueHelp>
                   <format>active-backup</format>
                   <description>Use only one primary link at a time and failover to another designated link</description>

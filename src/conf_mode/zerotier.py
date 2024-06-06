@@ -266,6 +266,7 @@ def generate(config):
         "podman_command": podman_command,
         "local_conf_content": local_conf,
         "network_id": config.get(i).get("network_id"),
+        "api_key": config.get(i).get("api_key"),
         "mtu": config.get(i).get("mtu"),
         "podman_quadlet": podman_quadlet
         }
@@ -280,6 +281,7 @@ def apply(config):
         local_conf_changed, network_id_changed = False, False
         networkID = podmanDict.get(i).get('network_id')
         api_key = podmanDict.get(i).get('api_key')
+        print(json.dumps(podmanDict.get(i), indent=4))
         os.makedirs(f"/config/vyos-zerotier/{i}/networks.d", exist_ok=True)
 
         # Check if new local.conf is different from existing local.conf
@@ -303,11 +305,6 @@ def apply(config):
             # Create devicemap; used to map zerotier interface to named interface
             with open(f"/config/vyos-zerotier/{i}/devicemap", "w") as file:
                 file.write(f"{networkID}={i}")
-
-        if api_key:
-            # Create file for ZeroTier Central API calls
-            with open(f"/config/vyos-zerotier/{i}/zt_central_api.secret", "w") as file:
-                file.write("")
 
         # Check if network-id has changed; if changed delete old <net-id>.local.conf
         for filename in os.listdir(f"/config/vyos-zerotier/{i}/networks.d"):

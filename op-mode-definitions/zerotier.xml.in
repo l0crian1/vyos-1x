@@ -1,0 +1,115 @@
+<?xml version="1.0" ?>
+<interfaceDefinition>
+  <node name="show">
+    <children>
+      <node name="interfaces">
+        <children>
+          <node name="zerotier">
+            <properties>
+              <help>Show ZeroTier information</help>
+            </properties>
+            <command>${vyos_op_scripts_dir}/zerotier.py show_interfaces</command>
+            <children>
+              <tagNode name="interface">
+                <properties>
+                  <help>Show ZeroTier information for given interface</help>
+                  <completionHelp>
+                    <path>interfaces zerotier</path>
+                    <list>ztN</list>
+                  </completionHelp>
+                </properties>
+                <command>${vyos_op_scripts_dir}/zerotier.py show_interfaces --interface $4</command>
+                <children>
+                  <node name="bonding">
+                    <properties>
+                      <help>Show ZeroTier bonding for given interface</help>
+                    </properties>
+                    <children>
+                      <tagNode name="node-id">
+                        <properties>
+                          <help>Show ZeroTier bonding for given peer</help>
+                          <completionHelp>
+                            <list>ztN</list>
+                          </completionHelp>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_command --interface $4 &quot;bond $7&quot;</command>
+                      </tagNode>
+                    </children>
+                    <command>${vyos_op_scripts_dir}/zerotier.py show_command --interface $4 --command &quot;bond list&quot;</command>
+                  </node>
+                  <node name="metrics">
+                    <properties>
+                      <help>Show ZeroTier metrics</help>
+                    </properties>
+                    <children>
+                      <leafNode name="accepted-packets">
+                        <properties>
+                          <help>Show ZeroTier metrics for accepted packets</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric acceptedpackets</command>
+                      </leafNode>
+                      <leafNode name="errors">
+                        <properties>
+                          <help>Show ZeroTier metrics for control-plane errors</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric errors</command>
+                      </leafNode>
+                      <leafNode name="latency">
+                        <properties>
+                          <help>Show ZeroTier metrics for latency buckets</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric latency</command>
+                      </leafNode>
+                      <leafNode name="packet-types">
+                        <properties>
+                          <help>Show ZeroTier metrics for packet types</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric packettype</command>
+                      </leafNode>
+                      <leafNode name="peer-packets">
+                        <properties>
+                          <help>Show ZeroTier metrics for packets to/from peers</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric peerpackets</command>
+                      </leafNode>
+                      <leafNode name="peer-packet-errors">
+                        <properties>
+                          <help>Show ZeroTier metrics for error count from peers</help>
+                        </properties>
+                        <command>${vyos_op_scripts_dir}/zerotier.py show_metrics --interface $4 --metric peerpacketerrors</command>
+                      </leafNode>
+                    </children>
+                  </node>
+                  <leafNode name="network">
+                    <properties>
+                      <help>Show ZeroTier network for given interface</help>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/zerotier.py show_command --interface $4 --command listnetworks</command>
+                  </leafNode>
+                  <leafNode name="peers">
+                    <properties>
+                      <help>Show ZeroTier peers for given interface</help>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/zerotier.py show_command --interface $4 --command peers</command>
+                  </leafNode>
+                  <leafNode name="peers-all">
+                    <properties>
+                      <help>Show peer detail for all peers</help>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/zerotier.py show_peers_all --interface $4</command>
+                  </leafNode>
+                  <leafNode name="peers-detail">
+                    <properties>
+                      <help>Show peer detail for connected peers</help>
+                    </properties>
+                    <command>${vyos_op_scripts_dir}/zerotier.py show_peers_detail --interface $4</command>
+                  </leafNode>
+                </children>
+              </tagNode>
+            </children>
+          </node>
+        </children>
+      </node>
+    </children>
+  </node>
+</interfaceDefinition>
