@@ -58,8 +58,10 @@ def show_interfaces(raw: bool, interface: typing.Optional[str]):
             # Get Network ID
             network_id = zt_dict.get('network_id')
             description = zt_dict.get('description')
-            # Get Node ID
-            node_id = json.loads(cmd(f"podman exec vyos_created_{interface_name} zerotier-cli info -j")).get('address')
+            # Get Node ID and Version
+            cli_dict = json.loads(cmd(f"podman exec vyos_created_{interface_name} zerotier-cli info -j"))
+            node_id = cli_dict.get('address')
+            version = cli_dict.get('version')
             tmp = json.loads(cmd(f"ip -j addr show dev {interface_name}"))[0].get('addr_info')
 
             # Get IP Addresses
@@ -72,6 +74,7 @@ def show_interfaces(raw: bool, interface: typing.Optional[str]):
                                 node_id,
                                 '\n'.join(ip_list),
                                 network_id,
+                                version,
                                 description]
                                )
 
@@ -79,13 +82,14 @@ def show_interfaces(raw: bool, interface: typing.Optional[str]):
             raw_dict[interface]['node_id'] = node_id
             raw_dict[interface]['ip_address'] = ip_list
             raw_dict[interface]['network_id'] = network_id
+            raw_dict[interface]['version'] = version
             raw_dict[interface]['description'] = description
 
     if raw:
         return {'zerotier': raw_dict}
     else:
         # Tabulate print information
-        headers = ["Interface", "Node ID", "IP Address", "Network", "Description"]
+        headers = ["Interface", "Node ID", "IP Address", "Network", "Version", "Description"]
         print(tabulate(output_list, headers))
 
 def zt_api(url, api_token, api_type):
