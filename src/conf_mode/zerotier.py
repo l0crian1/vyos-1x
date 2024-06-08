@@ -280,6 +280,11 @@ def generate(config):
 
 def apply(config):
     path = f"/config/vyos-zerotier/"
+
+        # Check if the directory exists
+    if not os.path.exists(path):
+        os.makedirs(path)
+
     directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
 
     for i in podmanDict:
