@@ -22,6 +22,7 @@ import json
 from tabulate import tabulate
 import requests
 import re
+import time
 
 import vyos.opmode
 from vyos.utils.process import cmd
@@ -29,14 +30,26 @@ from vyos.configquery import ConfigTreeQuery
 
 conf = ConfigTreeQuery()
 
-def show_interfaces(raw: bool):
+def show_interfaces(raw: bool, interface: typing.Optional[str]):
     # Get list of interfaces
     zt_int_dict = conf.get_config_dict(['interfaces', 'zerotier'], key_mangling=('-', '_'),
                             get_first_key=True)
 
+
+    if interface:
+        # Check if interface that was specified exists
+        if interface not in zt_int_dict.keys():
+            raise vyos.opmode.Error(f'ZeroTier interface not configured')
+        if_list = [interface]
+    else:
+        if_list = zt_int_dict.keys()
+
+    if not if_list:
+        raise vyos.opmode.Error(f'No ZeroTier interfaces configured')
+
     output_list = []
     raw_dict = {}
-    for interface in zt_int_dict.keys():
+    for interface in if_list:
         zt_dict = zt_int_dict.get(interface)
         raw_dict[interface] = {}
 
@@ -44,6 +57,7 @@ def show_interfaces(raw: bool):
             interface_name = interface
             # Get Network ID
             network_id = zt_dict.get('network_id')
+            description = zt_dict.get('description')
             # Get Node ID
             node_id = json.loads(cmd(f"podman exec vyos_created_{interface_name} zerotier-cli info -j")).get('address')
             tmp = json.loads(cmd(f"ip -j addr show dev {interface_name}"))[0].get('addr_info')
@@ -57,24 +71,25 @@ def show_interfaces(raw: bool):
             output_list.append([interface_name,
                                 node_id,
                                 '\n'.join(ip_list),
-                                network_id]
+                                network_id,
+                                description]
                                )
 
+            # Generate dict for raw output
             raw_dict[interface]['node_id'] = node_id
             raw_dict[interface]['ip_address'] = ip_list
             raw_dict[interface]['network_id'] = network_id
+            raw_dict[interface]['description'] = description
 
     if raw:
         return {'zerotier': raw_dict}
     else:
         # Tabulate print information
-        headers = ["Interface", "Node ID", "IP Address", "Network"]
+        headers = ["Interface", "Node ID", "IP Address", "Network", "Description"]
         print(tabulate(output_list, headers))
 
-def orbit_moon():
-    pass
-
 def zt_api(url, api_token, api_type):
+    # Create the headers for API calls
     if api_type == "service":
         headers = {
             "X-ZT1-Auth": api_token
@@ -89,10 +104,9 @@ def zt_api(url, api_token, api_type):
         response.raise_for_status()  # Raises HTTPError for bad responses (4xx and 5xx)
         return response  # Assuming you want to return the parsed JSON data directly
     except requests.exceptions.HTTPError as http_err:
-        exit(f'HTTP error occurred: {http_err}')
+        raise vyos.opmode.Error(f'HTTP error occurred: {http_err}')
     except Exception as err:
-        exit(f'Other error occurred: {err}')
-    return None  # Return None in case of an error
+        raise vyos.opmode.Error(f'Other error occurred: {err}')
 
 def show_peers_detail(raw: bool, interface: typing.Optional[str]):
     localNodeList = []
@@ -102,25 +116,26 @@ def show_peers_detail(raw: bool, interface: typing.Optional[str]):
                             get_first_key=True)
 
     api_token = peer_dict.get('api_key')
-    if api_token:
-        pass
-    else:
-        exit("This command requires a ZeroTier Central API key to be configured")
+    if not api_token:
+        raise vyos.opmode.Error("This command requires a ZeroTier Central API key to be configured")
+
     primary_port = peer_dict.get('primary_port')
 
     try:
         with open(f'/config/vyos-zerotier/{interface}/authtoken.secret', 'r') as file:
             authtoken = file.read()
     except FileNotFoundError:
-        print('authtoken.secret not found! This should have been created when installing ZeroTier')
+        raise vyos.opmode.Error(f'authtoken.secret not found! This should have been created when creating an interface. Does {interface} exist')
 
     controllerNodeList = []
     controllerNetworkList = []
 
+    # Get local list of nodes
     network_data = zt_api(f'http://127.0.0.1:{primary_port}/peer', authtoken, 'service').json()
     for peers in network_data:
         localNodeList.append(peers['address'])
 
+    # Get list of all networks in a ZeroTier controller
     network_data = zt_api('https://api.zerotier.com/api/v1/network', api_token, 'central').json()
     for networks in network_data:
         controllerNetworkList.append(networks['id'])
@@ -147,14 +162,13 @@ def show_peers_all(raw: bool, interface: typing.Optional[str]):
                             get_first_key=True)
 
     api_token = peer_dict.get('api_key')
-    if api_token:
-        pass
-    else:
-        exit("This command requires a ZeroTier Central API key to be configured")
+    if not api_token:
+        raise vyos.opmode.Error("This command requires a ZeroTier Central API key to be configured")
 
     controllerNodeList = []
     controllerNetworkList = []
 
+    # Get list of all nodes within a network in a ZeroTier controller
     network_data = zt_api('https://api.zerotier.com/api/v1/network', api_token, 'central').json()
     for networks in network_data:
         controllerNetworkList.append(networks['id'])
@@ -204,11 +218,12 @@ def show_metrics(raw: bool, metric: typing.Optional[str], interface: typing.Opti
         with open(f'/config/vyos-zerotier/{interface}/metricstoken.secret', 'r') as file:
             authtoken = file.read()
     except FileNotFoundError:
-        exit('authtoken.secret not found! This should have been created when installing ZeroTier')
+        raise vyos.opmode.Error(f'metricstoken.secret not found! This should have been created when when creating an interface. Does {interface} exist?')
 
     network_data = zt_api(f'http://127.0.0.1:{primary_port}/metrics', authtoken, 'service')
 
     for i in network_data.text.split('\n'):
+        # Skip comments
         if i.startswith('# '):
             continue
 
@@ -279,10 +294,41 @@ def show_metrics(raw: bool, metric: typing.Optional[str], interface: typing.Opti
     print(tabulate(sorted_list, headers))
 
 def show_command(raw: bool, command: typing.Optional[str], interface: typing.Optional[str]):
-    if raw:
-        return {'zerotier': json.loads(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command} -j"))}
-    else:
-        print(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command}"))
+    # Validate commands
+    def is_10_digit_hex(value):
+        pattern = re.compile(r'^[0-9a-fA-F]{10}$')
+        return bool(pattern.match(value))
+
+    if 'bond' in command and 'show' in command:
+        tmp = is_10_digit_hex(command.split()[1])
+        if not tmp:
+            raise vyos.opmode.Error(f"'{command.split()[1]}' must be a 10-digit hex value")
+
+    if 'listnetworks' == command or 'peers' == command or ('bond' in command and 'list' in command):
+        error_msg = f"Command could not be executed. Is {interface} up?"
+
+
+    try:
+        if raw:
+            return {'zerotier': json.loads(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command} -j"))}
+        else:
+            print(cmd(f"podman exec vyos_created_{interface} zerotier-cli {command}"))
+    except:
+        raise vyos.opmode.DataUnavailable(error_msg)
+
+def set_allowed(raw: bool, allowed: typing.Optional[str], interface: typing.Optional[str], state: typing.Optional[str]):
+    allow_dict = conf.get_config_dict(['interfaces', 'zerotier', interface], key_mangling=('-', '_'),
+                            get_first_key=True)
+
+    network_id = allow_dict.get('network_id')
+
+    if not network_id:
+        raise vyos.opmode.DataUnavailable(f"Command could not be executed. Is {interface} up?")
+
+    cmd(f"podman exec vyos_created_{interface} zerotier-cli set {network_id} {allowed}={state}")
+
+def reset_node():
+    print('test')
 
 if __name__ == '__main__':
     try:

@@ -23,12 +23,14 @@ import textwrap
 import shutil
 import json
 import datetime
+import textwrap
+import re
 
 from collections import Counter
 
+from vyos.utils.process import cmd, rc_cmd
 from vyos.config import Config
 from vyos import ConfigError
-
 
 def generate_local_conf(data):
     # Base local.conf
@@ -37,7 +39,6 @@ def generate_local_conf(data):
             "virtual": {},
             "settings": {}
         }
-    #print(data)
 
     ############################################################
     #################### Physical Dict Path ####################
@@ -158,7 +159,6 @@ def generate_local_conf(data):
     if data.get('bonding_policy'):
         local_conf_dict['settings']['defaultBondingPolicy'] = data.get("bonding_policy")
 
-    #print(json.dumps(local_conf_dict, indent=4))
     return local_conf_dict
 
 def get_config(config=None):
@@ -183,6 +183,10 @@ def verify(config):
         verify_data = config[i]
         priPort = config.get(i).get("primary_port")
 
+        if not config.get(i).get('version'):
+            raise ConfigError("Version must be configured")
+        image_name = f"zerotier/zerotier:{config.get(i).get('version')}"
+
         # Primary Port must be configured
         if not priPort:
             raise ConfigError("Primary Port must be configured")
@@ -190,6 +194,16 @@ def verify(config):
         # Network ID must be configured
         if not config.get(i).get('network_id'):
             raise ConfigError("Network ID must be configured")
+
+        # Check if container images is present
+        if not cmd(f"sudo podman images -q {image_name}"):
+            print(re.sub(r'(?<!\n)\n(?!\n)', ' ', textwrap.dedent(f"""\
+                {image_name} container not present. Ensure that you follow all necessary licensing requirements
+                for using ZeroTier.
+
+                Image installation can be performed using the following op command (Requires Internet Access):
+                                  """)) + "\n")
+            raise ConfigError(f"add container image {image_name}")
 
         # latency weight and delay variance weight must equal 10
         if verify_data.get('custom_policy'):
@@ -212,28 +226,11 @@ def verify(config):
     if dupCheck:
         raise ConfigError(f"Primary Port {', '.join(dupCheck)} configured on more than one interface")
 
-    # Check if container images is present
-    if not subprocess.run(f"sudo podman images -q l0crian/vyos-zerotier:latest", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout:
-        print("l0crian/vyos-zerotier:latest container not present. Run the following op command: (Requires Internet Access)\n")
-        raise ConfigError("add container image l0crian/vyos-zerotier:latest")
+
 
 def generate(config):
     global podmanDict
     podmanDict = {}
-
-    # Build Podman configuration (not needed if using Quadlet)
-    for i in config:
-        podman_command = [
-            "podman", "run", "-d",
-            "--name", f"vyos_created_{i}",
-            "--device=/dev/net/tun",
-            "--net=host",
-            "--cap-add=NET_ADMIN",
-            "--cap-add=SYS_ADMIN",
-            "--restart=unless-stopped",
-            "-v", f"/config/vyos-zerotier/{i}:/var/lib/zerotier-one",
-            "l0crian/vyos-zerotier:latest"
-        ]
 
     # Build Quadlet configuration
     for i in config:
@@ -248,7 +245,15 @@ def generate(config):
             User=root
             Group=root
             ExecStartPre=-/usr/bin/podman rm -f vyos_created_{i}
-            ExecStart=/usr/bin/podman run --name vyos_created_{i} --device=/dev/net/tun --net=host --cap-add=NET_ADMIN --cap-add=SYS_ADMIN --restart=always -v /config/vyos-zerotier/{i}:/var/lib/zerotier-one l0crian/vyos-zerotier:latest
+            ExecStart=/usr/bin/podman run --name vyos_created_{i} \\
+                --device=/dev/net/tun \\
+                --net=host \\
+                --cap-add=NET_ADMIN \\
+                --cap-add=SYS_ADMIN \\
+                --restart=always \\
+                --no-healthcheck \\
+                -v /config/vyos-zerotier/{i}:/var/lib/zerotier-one \\
+                zerotier/zerotier:{config.get(i).get('version')}
             ExecStop=/usr/bin/podman stop vyos_created_{i}
             ExecReload=/usr/bin/podman restart vyos_created_{i}
             Restart=always
@@ -263,11 +268,11 @@ def generate(config):
 
         # Generate the configuration dict to use with apply()
         podmanDict[i] = {
-        "podman_command": podman_command,
         "local_conf_content": local_conf,
         "network_id": config.get(i).get("network_id"),
         "api_key": config.get(i).get("api_key"),
         "mtu": config.get(i).get("mtu"),
+        "image_name": f"zerotier/zerotier:{config.get(i).get('version')}",
         "podman_quadlet": podman_quadlet
         }
 
@@ -278,11 +283,18 @@ def apply(config):
     directories = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
 
     for i in podmanDict:
-        local_conf_changed, network_id_changed = False, False
+        local_conf_changed, network_id_changed, version_changed = False, False, False
         networkID = podmanDict.get(i).get('network_id')
-        api_key = podmanDict.get(i).get('api_key')
-        print(json.dumps(podmanDict.get(i), indent=4))
+        image_name = podmanDict.get(i).get('image_name')
+        container_data = json.loads(cmd(f"podman container list --format json"))
         os.makedirs(f"/config/vyos-zerotier/{i}/networks.d", exist_ok=True)
+
+        # Check if version has changed
+        for con in container_data:
+            #print(con)
+            if i in con.get('Names')[0]:
+                if image_name not in con.get('Image'):
+                    version_changed = True
 
         # Check if new local.conf is different from existing local.conf
         try:
@@ -316,7 +328,6 @@ def apply(config):
                         network_id_changed = True
                 else:
                     os.remove(file_path)
-                    #print(filename)
 
         # Write service Quadlet for container to disk
         with open(f"/etc/systemd/system/vyos-zerotier@{i}.service", 'w') as file:
@@ -324,47 +335,32 @@ def apply(config):
 
 
         # Create services for ZeroTier containers
-        subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, text=True)
-        enabled = subprocess.run(f"sudo systemctl is-enabled vyos-zerotier@{i}.service", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
+        cmd("sudo systemctl daemon-reload")
+        #subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, text=True)
+
+        enabled = rc_cmd(f"sudo systemctl is-enabled vyos-zerotier@{i}.service")[1].strip()
+        #enabled = subprocess.run(f"sudo systemctl is-enabled vyos-zerotier@{i}.service", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
 
         if enabled != "enabled":
-            subprocess.run(["sudo", "systemctl", "enable", "--now", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
-            subprocess.run(["sudo", "systemctl", "start", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
+            cmd(f"sudo systemctl enable --now vyos-zerotier@{i}.service")
+            cmd(f"sudo systemctl start vyos-zerotier@{i}.service")
+            # subprocess.run(["sudo", "systemctl", "enable", "--now", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
+            # subprocess.run(["sudo", "systemctl", "start", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
         else:
-            if local_conf_changed or network_id_changed:
-                subprocess.run(["sudo", "systemctl", "restart", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
-        # if local_conf_changed or network_id_changed:
-        #     with open(f"/etc/systemd/system/vyos-zerotier@{i}.service", 'w') as file:
-        #         file.write(podmanDict.get(i).get('podman_quadlet'))
-        #     subprocess.run(["podman", "container", "stop", f"vyos_created_{i}"], capture_output=True, text=True)
-        #     subprocess.run(["podman", "container", "rm", f"vyos_created_{i}"], capture_output=True, text=True)
-        #     subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, text=True)
-        #     print(i)
-        #     #print("here1" + subprocess.run(['systemctl', 'is-enabled', f"vyos-zerotier@{i}.service"], stdout=subprocess.PIPE).stdout)
-        #     enabled = subprocess.run(f"sudo systemctl is-enabled vyos-zerotier@{i}.service", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
-        #     print(enabled + "test")
-        #     if enabled != "enabled":
-        #         print('if enabled')
-        #         result = subprocess.run(["sudo", "systemctl", "enable", "--now", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
-        #         print(result)
-        #         subprocess.run(["sudo", "systemctl", "start", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
-        #     else:
-        #         subprocess.run(["sudo", "systemctl", "restart", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
+            if local_conf_changed or network_id_changed or version_changed:
+                cmd(f"sudo systemctl restart vyos-zerotier@{i}.service")
+                # subprocess.run(["sudo", "systemctl", "restart", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
 
-
-            #subprocess.run(["podman", "container", "stop", f"vyos_created_{i}"], capture_output=True, text=True)
-            #subprocess.run(["podman", "container", "rm", f"vyos_created_{i}"], capture_output=True, text=True)
-            #subprocess.run(podmanDict[i]['podman_command'], capture_output=True, text=True)
-        # else:
-        #     continue
-
-    containers = json.loads(subprocess.run(['podman', 'ps', '--format', 'json'], stdout=subprocess.PIPE).stdout)
+    containers = json.loads(cmd("podman ps --format json"))
+    #containers = json.loads(subprocess.run(['podman', 'ps', '--format', 'json'], stdout=subprocess.PIPE).stdout)
 
     # Stop and remove container if interface is deleted
     for container in containers:
         if f"{container['Names'][0]}".replace("vyos_created_", "") not in podmanDict.keys():
-            subprocess.run(["podman", "container", "stop", container['Names'][0]], capture_output=True, text=True)
-            subprocess.run(["podman", "container", "rm", container['Names'][0]], capture_output=True, text=True)
+            cmd(f"podman container stop {container.get('Names')[0]}")
+            cmd(f"podman container rm {container.get('Names')[0]}")
+            # subprocess.run(["podman", "container", "stop", container['Names'][0]], capture_output=True, text=True)
+            # subprocess.run(["podman", "container", "rm", container['Names'][0]], capture_output=True, text=True)
 
     for i in directories:
         if i not in podmanDict.keys() and i != "backup":
@@ -377,10 +373,13 @@ def apply(config):
             shutil.rmtree(f"{path}{i}")
 
             # Delete to service for the deleted interface
-            subprocess.run(["sudo", "systemctl", "stop", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
-            subprocess.run(["sudo", "systemctl", "disable", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
+            cmd(f"sudo systemctl stop vyos-zerotier@{i}.service")
+            cmd(f"sudo systemctl disable vyos-zerotier@{i}.service")
+            # subprocess.run(["sudo", "systemctl", "stop", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
+            # subprocess.run(["sudo", "systemctl", "disable", f"vyos-zerotier@{i}.service"], capture_output=True, text=True)
             os.remove(f"/etc/systemd/system/vyos-zerotier@{i}.service")
-            subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, text=True)
+            cmd(f"sudo systemctl daemon-reload")
+            # subprocess.run(["sudo", "systemctl", "daemon-reload"], capture_output=True, text=True)
 
 try:
     c = get_config()

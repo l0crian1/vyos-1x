@@ -86,7 +86,7 @@
                   <description>Auto-balance flows across links</description>
               </valueHelp>
               <valueHelp>
-                  <format>User Defined</format>
+                  <format>&lt;User Defined&gt;</format>
                   <description>User Defined policy</description>
               </valueHelp>
             </properties>
@@ -102,7 +102,10 @@
             <children>
               <leafNode name="base-policy">
                 <properties>
-                  <help>Set ZeroTier MTU for specified IPv4 Network</help>
+                  <help>Base bonding policy</help>
+                  <completionHelp>
+                    <list>active-backup broadcast balance-rr balance-xor balance-aware</list>
+                  </completionHelp>
                   <constraint>
                     <regex>(active-backup|broadcast|balance-rr|balance-xor|balance-aware)</regex>
                   </constraint>
@@ -333,6 +336,7 @@
               </leafNode>
             </children>
           </tagNode>
+          #include <include/generic-description.xml.i>
           <leafNode name="force-tcp-relay">
             <properties>
               <help>Disables UDP communication and forces TCP</help>
@@ -343,7 +347,7 @@
             <properties>
               <help>Prevent binding of ZeroTier service to interfaces</help>
               <valueHelp>
-                  <format>Interface Prefix to blacklist</format>
+                  <format>Interface Blacklist</format>
                   <description>Interface prefix (e.g. eth,br,wg,vxlan,etc...)</description>
               </valueHelp>
               <multi/>
@@ -351,7 +355,7 @@
           </leafNode>
           <leafNode name="low-bandwidth-mode">
             <properties>
-              <help>Enable low-bandwidth-mode (limits chattiness of control traffic)</help>
+              <help>Enable low-bandwidth-mode (limits control traffic)</help>
               <valueless/>
             </properties>
           </leafNode>
@@ -425,14 +429,14 @@
           </leafNode>
           <tagNode name="peer-config">
             <properties>
-              <help>Peer specific ZeroTier config</help>
+              <help>10-digit hex</help>
               <constraint>
                   <regex>^[A-Fa-f0-9]{10}$</regex>
               </constraint>
               <constraintErrorMessage>Peer address must be 10-digit hexadecimal value</constraintErrorMessage>
               <valueHelp>
-                  <format>10-digit hex</format>
-                  <description>ZeroTier Peer ID</description>
+                  <format>Peer Node ID</format>
+                  <description>Peer specific ZeroTier config</description>
               </valueHelp>
             </properties>
             <children>
@@ -458,7 +462,7 @@
                   </constraint>
                   <constraintErrorMessage>Value must be in the format: IPv4/Port</constraintErrorMessage>
                   <valueHelp>
-                    <format>x.x.x.x/p</format>
+                    <format>&lt;x.x.x.x/p&gt;</format>
                     <description>IP/Port of peer (e.g. 10.0.0.1/9993)</description>
                   </valueHelp>
                   <multi/>
@@ -503,7 +507,7 @@
                       <description>Auto-balance flows across links</description>
                   </valueHelp>
                   <valueHelp>
-                      <format>User Defined</format>
+                      <format>&lt;User Defined&gt;</format>
                       <description>User Defined policy</description>
                   </valueHelp>
                 </properties>
@@ -559,6 +563,22 @@
               <valueHelp>
                   <format>u32:1-65535</format>
                   <description>Zerotier tertiary port</description>
+              </valueHelp>
+            </properties>
+          </leafNode>
+          <leafNode name="version">
+            <properties>
+              <help>Version of ZeroTier to use (required)</help>
+              <completionHelp>
+                <list>latest 1.14.0 1.12.2 1.12.1</list>
+              </completionHelp>
+              <constraint>
+                  <regex>(latest|1.14.0|1.12.2|1.12.1)</regex>
+              </constraint>
+              <constraintErrorMessage>Only listed versions are supported</constraintErrorMessage>
+              <valueHelp>
+                  <format>txt</format>
+                  <description>ZeroTier version</description>
               </valueHelp>
             </properties>
           </leafNode>
